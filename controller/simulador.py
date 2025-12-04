@@ -1,8 +1,9 @@
 import matplotlib.pyplot as plt
 import matplotlib.patches as patches
-from matplotlib.widgets import Slider
+from matplotlib.widgets import Slider, Button
 from matplotlib.animation import FuncAnimation
 import numpy as np
+from controlador_fuzzy import ControladorFuzzy
 
 class SimuladorExperimento:
     def __init__(self):
@@ -37,6 +38,11 @@ class SimuladorExperimento:
         # Flag para controlar animação
         self.animacao_ativa = False
         
+        self.usar_controlador = False
+        self.altura_desejada = 50
+        self.controlador = None
+        self.distancia_sensor_lida = 0
+        
         # Criar figura e eixos
         self.fig, self.ax = plt.subplots(figsize=(10, 9))
         self.fig.suptitle('Simulador de experimento', 
@@ -52,6 +58,10 @@ class SimuladorExperimento:
                             valinit=0, valstep=1)
         self.slider.on_changed(self.atualizar_velocidade_fan)
         
+        ax_botao = plt.axes([0.85, 0.02, 0.12, 0.03])
+        self.botao_controlador = Button(ax_botao, 'Fuzzy OFF')
+        self.botao_controlador.on_clicked(self.toggle_controlador)
+        
         self.texto_altura = self.ax.text(0, self.altura_tubo + 5, 
                                          'Altura detectada: 0.0 cm\n'
                                          'Velocidade: 0.0 cm/s', 
@@ -66,10 +76,28 @@ class SimuladorExperimento:
         self.desenhar_bolinha()
         self.desenhar_fan()
         
-        plt.subplots_adjust(bottom=0.1)
+        plt.subplots_adjust(bottom=0.12)
         
         self.animacao = FuncAnimation(self.fig, self.atualizar_fisica, 
                                      interval=10, blit=False)
+    
+    def toggle_controlador(self, event):
+        self.usar_controlador = not self.usar_controlador
+        
+        if self.usar_controlador:
+            if self.controlador is None:
+                self.controlador = ControladorFuzzy(
+                    altura_tubo=self.altura_tubo,
+                    altura_sensor=self.altura_sensor,
+                    altura_desejada=self.altura_desejada
+                )
+            self.botao_controlador.label.set_text('Fuzzy ON')
+            self.botao_controlador.color = 'lightgreen'
+        else:
+            self.botao_controlador.label.set_text('Fuzzy OFF')
+            self.botao_controlador.color = 'lightgray'
+        
+        self.fig.canvas.draw_idle()
     
     def calcular_forca_vento(self, altura):
         if self.velocidade_fan == 0:
@@ -150,15 +178,26 @@ class SimuladorExperimento:
         distancia_sensor_lida = distancia_real + ruido_sensor
         
         distancia_sensor_lida = max(0, distancia_sensor_lida)
+        self.distancia_sensor_lida = distancia_sensor_lida
+        
+        if self.usar_controlador and self.controlador is not None:
+            velocidade_controlador = self.controlador.calcular_velocidade(
+                distancia_sensor_lida
+            )
+            self.velocidade_fan = velocidade_controlador
+            self.slider.set_val(velocidade_controlador)
         
         altura_detectada = (self.altura_tubo + self.altura_sensor) - distancia_sensor_lida
         self.linha_laser.set_data([0, 0], 
                                   [self.altura_tubo + self.altura_sensor, 
                                    altura_detectada])
         
+        modo = "AUTOMÁTICO (Fuzzy)" if self.usar_controlador else "MANUAL"
         self.texto_altura.set_text(
+            f'Modo: {modo}\n'
             f'Sensor (com ruído): {distancia_sensor_lida:.1f} cm\n'
             f'Altura real bolinha: {self.altura_bolinha:.1f} cm\n'
+            f'Altura desejada: {self.altura_desejada:.1f} cm\n'
             f'Velocidade: {self.velocidade_bolinha:.1f} cm/s\n'
             f'Velocidade fan: {self.velocidade_fan:.0f}%'
         )
