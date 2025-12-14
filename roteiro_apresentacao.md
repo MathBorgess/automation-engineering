@@ -70,10 +70,12 @@
 ### Slide 12 — Implementação do controlador e testes
 - Como o controlador gera o PWM
 - Testes: setpoints, ruído/turbulência (simulação e/ou físico)
+- Comparação rápida: **Proporcional (baseline)** vs **Fuzzy (melhorado)**
 
 ### Slide 13 — Demonstração do sistema físico (ao vivo)
 - Mostrar: referência → esfera estabilizando
 - Mostrar: resposta a perturbação leve (se for seguro)
+- Mostrar protocolo/telemetria: comandos `FAN:XX` e leituras `DIST:YY.Y`
 
 ### Slide 14 — Conclusões e trabalhos futuros
 - Lições aprendidas
@@ -121,8 +123,10 @@ Frases-guia:
 **Objetivo da fala**: mostrar como o controlador toma decisão e por que funciona bem em prática.
 
 Checklist:
-- [ ] Variáveis linguísticas (erro/variação ou distância, conforme a implementação).
+- [ ] Variáveis linguísticas (**distância do sensor** como entrada principal, conforme a implementação atual).
 - [ ] Funções de pertinência e regras.
+- [ ] Complementos do controlador: correção proporcional, filtro de suavização e velocidade mínima.
+- [ ] (Se aplicável) calibração por histórico (`log_experimento.csv`) e uso de lookup distância→velocidade.
 - [ ] Mostrar resultado em simulação e/ou testes físicos (se houver).
 
 Frases-guia:
@@ -137,9 +141,10 @@ Checklist:
 
 Sugestão de demo (sequência):
 1) Mostrar estado inicial (esfera fora do setpoint)
-2) Ligar controle / aplicar PWM
-3) Esfera converge para altura alvo
-4) Pequena perturbação controlada (opcional) e recuperação
+2) Mostrar modo **Manual** (PWM fixo) por alguns segundos
+3) Alternar para **Proporcional** (baseline) e observar resposta
+4) Alternar para **Fuzzy** (melhorado) e observar estabilidade
+5) Pequena perturbação controlada (opcional) e recuperação
 
 Frases-guia:
 - “A principal evidência prática é a estabilização com ruído/turbulência presentes.”

@@ -1,124 +1,152 @@
 # Resumo da implementação (para apresentação)
 
-Este documento resume **o que foi implementado** no projeto de identificação e controle do sistema de levitação pneumática, conectando **código → experimento → resultados**.
+Este documento resume **o que foi implementado** no projeto, como os módulos se conectam e como demonstrar o funcionamento (simulação e físico).
 
 ---
 
-## 1) Visão geral da arquitetura
+## 1) Arquitetura do projeto (visão em blocos)
 
-**Objetivo:** controlar a altura de uma esfera em um tubo de ar ajustando o PWM do ventilador.
-
-**Componentes principais:**
-- **Aquisição (físico):** Arduino + sensor ultrassônico (HC-SR04) + fan (PWM).
-- **Dados:** logs com pares *(PWM, distância)*.
-- **Pré-processamento:** remoção de saturação e spikes; conversão cm → m.
-- **Identificação:** modelo de **Hammerstein** com parâmetros ajustados por **Evolução Diferencial** (DE).
-- **Controle:** controlador **Fuzzy** (baseado em regras e funções de pertinência) com saída em % de velocidade/PWM.
-- **Simulação:** simulador com ruído/turbulência para testar o controlador antes do físico.
+**Fluxo de desenvolvimento e validação**
+1. **Aquisição de dados (físico, malha aberta)** → coleta de pares (PWM, distância)
+2. **Pré-processamento** → limpeza de ruído/outliers e padronização de unidades
+3. **Identificação** → ajuste de um modelo de Hammerstein por Evolução Diferencial (DE)
+4. **Controle** → controlador Fuzzy para gerar PWM a partir da medição
+5. **Validação** → comparação em gráficos e métricas (MSE) e demonstração do sistema
 
 ---
 
-## 2) Organização do repositório (o que cada parte faz)
+## 2) Coleta de dados no sistema físico (Arduino)
 
-### 2.1 Controle
-- `controller/controlador_fuzzy.py`
-  - Implementa um controlador Fuzzy (Mamdani via `scikit-fuzzy`).
-  - Entrada: `distancia_sensor` (cm)
-  - Saída: `velocidade_fan` (0–100%)
-  - Possui funções para testar e visualizar funções de pertinência.
+**O que faz**
+- Lê um valor de PWM via Serial, aplica no fan (pino PWM) e imprime a distância medida pelo sensor ultrassônico.
 
-- `controller/simulador.py`
-  - Simulador 2D do tubo/bola usando `matplotlib`.
-  - Modela perturbações realistas (ruído de sensor, turbulência, perturbação de força, vibração).
-  - Permite alternar **manual** (slider) e **automático** (Fuzzy ON/OFF).
+**Código**
+- Sketch principal: [arduino/read_data_arduino.ino](arduino/read_data_arduino.ino)
 
-- `controller/Experimento.py`
-  - Especialização do simulador para rodar diretamente “Simulador com Controlador”.
+**Variante do experimento (protocolo Serial para malha fechada)**
+- Sketch: [controller/arduino_experimento.ino](controller/arduino_experimento.ino)
+- Recebe comandos `FAN:XX` (0–100%) e envia leituras `DIST:YY.Y` (cm) a cada ~50 ms.
 
-### 2.2 Identificação
-- `identifier/identificador.py`
-  - Lê dados experimentais de `identifier/dados.csv`.
-  - Identifica um modelo **Hammerstein**:
-    - Bloco não-linear (polinômio de 2º grau): gera sinal intermediário `v` a partir do PWM normalizado.
-    - Bloco linear (IIR discreto via `scipy.signal.lfilter`).
-  - Ajusta parâmetros via **Evolução Diferencial** (`scipy.optimize.differential_evolution`) minimizando MSE.
-  - Também simula um **modelo físico** simplificado (arrasto ∝ `v_rel^2`) com integração por `solve_ivp`.
-  - Gera gráficos comparando: dados reais × Hammerstein × físico.
+**Como funciona (resumo)**
+- Entrada: valor inteiro de PWM (0–255) enviado pela porta serial.
+- Saída: linhas no formato “Distância: X cm”, que podem ser logadas no PC.
 
-- `identifier/conversor_dados.py`
-  - Converte `identifier/dados.txt` (log bruto) → `identifier/dados.csv` (tratado).
-  - Filtra saturação (`pwm <= 240`) e remove spikes (limiar de variação em cm).
-  - Converte cm → m ao salvar.
-
-### 2.3 Aquisição no físico (Arduino)
-- `arduino/read_data_arduino.ino`
-  - Recebe PWM pela serial, aplica `analogWrite` no fan.
-  - Mede distância com HC-SR04 e imprime “Distância: X cm”.
-
-- `arduino/read_data.py`
-  - Script Python para varrer PWM e registrar leituras via serial.
-  - Observação: a porta está como `COM4` (adequado para Windows). No macOS, precisa trocar para `/dev/tty.*`.
+**Observação prática**
+- O script [arduino/read_data.py](arduino/read_data.py) é um exemplo de varredura de PWM e leitura serial (ajustar `PORTA` no macOS).
 
 ---
 
-## 3) Como executar (para preparar a apresentação)
+## 3) Pré-processamento do log (limpeza e CSV)
 
-### 3.1 Dependências
-As bibliotecas do simulador/identificação incluem:
-- `numpy`, `scipy`, `matplotlib`, `scikit-fuzzy`
+**Por que existe**
+- Leituras de distância podem ter *spikes* (picos) e ruído; isso degrada fortemente a identificação.
 
-Arquivo: `controller/requirements.txt`
+**O que faz**
+- Extrai (PWM, distância) do arquivo bruto.
+- Remove saturações (limite de PWM) e remove *spikes* por variação máxima aceitável.
+- Converte distância de cm para m (SI) ao salvar o CSV.
 
-### 3.2 Simulação com controlador (recomendado para demo “plano B”)
-No diretório do projeto:
-1. Rodar o simulador com controlador:
-   - `python controller/Experimento.py`
-2. Mostrar na apresentação:
-   - botão **Fuzzy ON/OFF**
-   - a esfera convergindo para a altura desejada
-   - ruído no sensor e pequenas oscilações (comportamento realista)
-
-Remember: a simulação é a forma mais segura de garantir demo caso o físico falhe.
-
-### 3.3 Identificação (gerar gráficos e MSE)
-1. (Opcional) Gerar `dados.csv` a partir do log bruto:
-   - `python identifier/conversor_dados.py`
-2. Rodar identificação + comparação com modelo físico:
-   - `python identifier/identificador.py`
-3. Mostrar na apresentação:
-   - gráfico de comparação (real × Hammerstein × físico)
-   - valores de MSE impressos no terminal
+**Código**
+- Conversão/limpeza: [identifier/conversor_dados.py](identifier/conversor_dados.py)
+- Exemplo de dataset processado: [identifier/dados.csv](identifier/dados.csv)
 
 ---
 
-## 4) Demonstração no sistema físico (parte recomendada da apresentação)
+## 4) Identificação: Modelo de Hammerstein + Evolução Diferencial
 
-**Objetivo da demo:** evidenciar que a planta real tem ruído/turbulência e que o controle/identificação são motivados por isso.
+**O modelo implementado**
+- Estrutura Hammerstein: 
+  - **Bloco NL estático**: polinômio de 2º grau em `u(k)`
+  - **Bloco L dinâmico**: filtro discreto IIR aplicado sobre a variável intermediária
 
-Roteiro rápido (3–4 min):
-1) Mostrar o sensor lendo distância (bola em repouso/posição inicial).
-2) Aplicar um PWM e mostrar a mudança de altura.
-3) (Se possível) variar o PWM e mostrar a resposta.
+**O que é estimado**
+- Parâmetros do polinômio (NL) e coeficientes do filtro discreto (L).
 
-Observações práticas:
-- Preparar iluminação/posicionamento do sensor para minimizar leituras inválidas.
-- Ensaiar com 2–3 PWMs pré-selecionados para não perder tempo.
+**Otimização**
+- Evolução Diferencial (`scipy.optimize.differential_evolution`) minimizando o **MSE** entre o sinal real e o sinal estimado.
+
+**Detalhe importante (variável medida)**
+- O dataset `dados.csv` contém **distância sensor→bola** em metros; por isso as curvas e o MSE da identificação são calculados nessa variável.
+
+**Validação adicional**
+- O script também inclui um **modelo físico simplificado** (equações do movimento + arrasto) para comparação e cálculo de MSE adicional.
+
+**Código**
+- Identificação completa: [identifier/identificador.py](identifier/identificador.py)
+
+**Saídas típicas para mostrar em apresentação**
+- Curvas: entrada PWM, saída real vs. Hammerstein vs. modelo físico, e erro.
+- Métricas: MSE (real×Hammerstein, real×físico, Hammerstein×físico).
 
 ---
 
-## 5) O que dizer (frases curtas, “tom de apresentação”)
+## 5) Controle: Controlador Fuzzy
 
-- “O pipeline fecha o ciclo: **coleta → limpeza → identificação → validação → controle**.”
-- “A identificação por Hammerstein separa a não-linearidade do atuador da dinâmica do sistema.”
-- “Usamos Evolução Diferencial para ajustar parâmetros minimizando MSE.”
-- “O Fuzzy é adequado porque o sistema é não linear e sofre turbulência e ruído.”
+**O que foi implementado (estado atual do código)**
+- **Controlador Fuzzy melhorado** (biblioteca `scikit-fuzzy`) que mapeia **distância do sensor** (cm) para ação de controle (velocidade do fan em %).
+- **Híbrido Fuzzy + correção proporcional**: após a inferência Fuzzy, aplica-se um termo proporcional `ganho_proporcional * erro` para reduzir erro estacionário.
+- **Filtro de suavização** (média exponencial) para reduzir oscilações (`alpha_filtro`).
+- **Velocidade mínima do fan** (`velocidade_minima`) para evitar “desligar” em regimes onde o fan não sustenta a esfera.
+- **Calibração por dados reais**: funções de pertinência e um *lookup* distância→velocidade podem ser ajustados automaticamente a partir do histórico em CSV.
+
+**Código**
+- Controlador: [controller/controlador_fuzzy.py](controller/controlador_fuzzy.py)
+
+**Baseline implementado (comparação)**
+- Controlador proporcional simples (offset + `kp * erro` + *deadband*): [controller/controlador_proporcional.py](controller/controlador_proporcional.py)
+
+**Interface principal**
+- `calcular_velocidade(distancia_sensor_lida)` → retorna `0–100` (%), já com saturação.
 
 ---
 
-## 6) Limitações atuais (para transparência acadêmica)
+## 6) Simulador (demonstração rápida sem hardware)
 
-- O texto do artigo descreve um **Fuzzy PD (erro e variação do erro)**, enquanto a implementação atual do controlador usa **distância como entrada única**.
-- A integração de malha fechada **100% no Arduino** (leitura → controle → PWM) ainda não está consolidada no código apresentado.
+**O que faz**
+- Simula a dinâmica da esfera com ruído de sensor, turbulência e perturbações, exibindo animação e sliders.
+- Permite ligar/desligar o controle e visualizar convergência para a altura desejada.
 
-Sugestão para fala:
-- “O controlador implementado hoje é uma versão baseada na distância; como evolução, podemos estender para PD‑Fuzzy completo e fechar malha no microcontrolador.”
+**Códigos**
+- Simulação base: [controller/simulador.py](controller/simulador.py)
+- Variante com controlador acoplado: [controller/Experimento.py](controller/Experimento.py)
+
+**Observação (modo físico via Serial)**
+- O simulador também integra comunicação Serial com Arduino (`FAN:`/`DIST:`), permitindo alternar **Manual → Proporcional → Fuzzy** e registrar histórico.
+- No macOS, é necessário ajustar a porta em [controller/simulador.py](controller/simulador.py) (ex.: `/dev/cu.usbserial-*`).
+
+**Por que é útil na apresentação**
+- Serve como “plano B” se o físico falhar.
+- Ajuda a explicar ruído/turbulência e o papel do controlador.
+
+---
+
+## 7) Dependências e execução (para demo)
+
+**Dependências (Python)**
+- Lista: [controller/requirements.txt](controller/requirements.txt)
+
+**Executar simulação (sugestão)**
+- No diretório do projeto, executar:
+  - `python controller/Experimento.py`
+
+**Executar identificação (sugestão)**
+- `python identifier/identificador.py`
+
+**Demo físico (sequência recomendada em sala)**
+1. Mostrar o setup físico (tubo, fan, sensor, Arduino)
+2. Rodar leitura do sensor e confirmar que a distância varia
+3. Aplicar PWM baixo → bola cai; PWM maior → bola sobe
+4. (Se implementado em malha fechada) ativar controle e mostrar estabilização
+
+---
+
+## 8) Pontos fortes e limitações (para falar em 30–45 s)
+
+**Pontos fortes**
+- Pipeline completo: dados → limpeza → identificação → validação → controle.
+- Identificação robusta a ruído (pré-processamento + metaheurística).
+- Controle interpretável (regras linguísticas) e adequado a incertezas.
+
+**Limitações atuais**
+- O controlador implementado está focado em distância/posição e pode ser estendido para a forma PD-Fuzzy completa (erro e variação do erro), se desejado.
+- Resultados dependem da qualidade do sensor (spikes) e do regime de operação do fan.
