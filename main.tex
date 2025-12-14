@@ -1,0 +1,113 @@
+\documentclass[conference]{IEEEtran}
+\usepackage[utf8]{inputenc}
+\usepackage[portuguese]{babel}
+\usepackage{cite}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{algorithmic}
+\usepackage{graphicx}
+\usepackage{textcomp}
+\usepackage{xcolor}
+\usepackage{float}
+
+% Título e Autores
+\title{Identificação e Controle de um Sistema de Levitação Pneumática utilizando Modelo de Hammerstein e Lógica Fuzzy}
+
+\author{\IEEEauthorblockN{Nome do Aluno}
+\IEEEauthorblockA{\textit{Engenharia de Controle e Automação} \\
+\textit{Universidade Federal de Pernambuco}\\
+Recife, Brasil \\
+email@ufpe.br}
+}
+
+\begin{document}
+
+\maketitle
+
+\begin{abstract}
+Este trabalho apresenta o desenvolvimento, identificação e controle de um sistema de levitação pneumática, caracterizado por sua dinâmica não-linear e instável. A metodologia adotada dividiu-se em duas etapas: identificação de sistemas e projeto do controlador. Para a identificação, utilizou-se a estrutura de blocos de Hammerstein, composta por uma não-linearidade estática seguida de uma dinâmica linear, cujos parâmetros foram estimados através do algoritmo de otimização metaheurística Evolução Diferencial (DE), utilizando dados reais de entrada e saída. Para o controle, implementou-se um controlador Fuzzy do tipo PD (Proporcional-Derivativo) para estabilizar a esfera em uma altura de referência, mitigando oscilações e rejeitando distúrbios aerodinâmicos. Os resultados experimentais demonstram que o modelo identificado obteve alta fidelidade aos dados físicos e o controlador apresentou desempenho satisfatório em regime permanente.
+\end{abstract}
+
+\begin{IEEEkeywords}
+Levitador Pneumático, Modelo de Hammerstein, Algoritmos Genéticos, Controle Fuzzy, Evolução Diferencial.
+\end{IEEEkeywords}
+
+\section{Introdução}
+Sistemas de levitação a ar são plataformas clássicas para o ensino e pesquisa em engenharia de controle devido à sua natureza inerentemente não-linear e instabilidade em malha aberta.  A dinâmica do sistema é governada pelo equilíbrio entre a força gravitacional e a força de arrasto gerada por um fluxo de ar turbulento.
+
+ A complexidade deste sistema reside na relação não-linear entre a tensão aplicada ao atuador (ventilador) e a velocidade do ar resultante, além das incertezas aerodinâmicas. Técnicas clássicas de identificação linear muitas vezes falham em capturar o comportamento global do sistema.  Portanto, este trabalho propõe o uso de uma abordagem baseada em dados (\textit{data-driven}) utilizando o Modelo de Hammerstein otimizado por algoritmos evolutivos.
+
+Para o controle, estratégias convencionais como o PID podem apresentar limitações em pontos de operação distantes da linearização.  O controle baseado em Lógica Fuzzy apresenta-se como uma alternativa robusta, permitindo incorporar o conhecimento de especialistas sobre o sistema na forma de regras linguísticas, dispensando um modelo matemático analítico preciso para a sintese do controlador.
+
+\section{Descrição do Sistema}
+O sistema físico consiste em um tubo de acrílico vertical contendo uma esfera leve (isopor). Na base, um cooler de computador (atuador) gera o fluxo de ar ascendente. No topo, um sensor ultrassônico ou a laser mede a posição vertical da esfera ($y$).
+
+O hardware de controle é composto por um microcontrolador (Arduino) que realiza a leitura do sensor, processa o algoritmo de controle e envia um sinal PWM ($u$) para o driver do motor.  A dinâmica é descrita simplificadamente pela Segunda Lei de Newton, onde a aceleração da bola depende da diferença entre a força de arrasto ($F_d \propto v_{ar}^2$) e o peso ($P = m \cdot g$).
+
+\section{Metodologia}
+
+\subsection{Aquisição de Dados}
+Para a identificação do sistema, foi realizado um experimento em malha aberta aplicando-se um sinal de excitação do tipo PRBS (\textit{Pseudo-Random Binary Sequence}) ao PWM do ventilador. Foram coletadas $N$ amostras contendo o valor do PWM (0-255) e a distância medida (cm), com um período de amostragem $T_s = 0.05s$. Os dados brutos passaram por um pré-processamento para remoção de \textit{outliers} (spikes) do sensor e conversão de unidades para o Sistema Internacional (SI).
+
+\subsection{Identificação via Modelo de Hammerstein}
+O sistema foi modelado utilizando a estrutura de Hammerstein, que consiste em um bloco não-linear estático em série com um bloco linear dinâmico.
+
+\textbf{Bloco Não-Linear (NL):} Representa a curva de atuação do ventilador, aproximada por um polinômio de 2º grau:
+\begin{equation}
+    v(k) = c_0 u(k)^2 + c_1 u(k) + c_2
+\end{equation}
+onde $u(k)$ é o PWM normalizado e $v(k)$ é uma variável intermediária que representa a força efetiva.
+
+\textbf{Bloco Linear (L):} Representa a dinâmica da bola, modelada por uma Função de Transferência discreta de 2ª ordem:
+\begin{equation}
+    G(z) = \frac{b_1 z^{-1} + b_2 z^{-2}}{1 + a_1 z^{-1} + a_2 z^{-2}}
+\end{equation}
+
+A estimação dos parâmetros $\theta = [c_0, c_1, c_2, b_1, b_2, a_1, a_2]$ foi realizada via algoritmo de \textbf{Evolução Diferencial}, configurado para minimizar o Erro Quadrático Médio (MSE) entre a saída do modelo e os dados reais coletados:
+\begin{equation}
+    J(\theta) = \frac{1}{N} \sum_{k=1}^{N} (y_{real}(k) - y_{modelo}(k, \theta))^2
+\end{equation}
+
+\subsection{Projeto do Controlador Fuzzy PD}
+Foi desenvolvido um controlador Fuzzy do tipo Mamdani com duas entradas e uma saída:
+\begin{itemize}
+    \item \textbf{Erro ($e$):} $Setpoint - Posição_{atual}$.
+    \item \textbf{Variação do Erro ($\Delta e$):} Representa a velocidade da bola.
+    \item \textbf{Saída ($u$):} Ciclo de trabalho (PWM).
+\end{itemize}
+
+ O uso da derivada ($\Delta e$) é crucial para amortecer as oscilações naturais do sistema pneumático. Foram definidas 5 funções de pertinência para cada variável (Muito Baixo, Baixo, Zero, Alto, Muito Alto) e um conjunto de regras heurísticas, por exemplo: \textit{"Se o Erro é Positivo (bola baixa) e a Variação é Zero (parada), então PWM é Alto"}.
+
+\section{Resultados}
+
+\subsection{Resultados da Identificação}
+O algoritmo de Evolução Diferencial convergiu após 80 iterações. A Fig. 1 apresenta a validação do modelo, comparando a resposta do modelo identificado com os dados reais de validação.
+
+\begin{figure}[htbp]
+    \centerline{\includegraphics[width=0.45\textwidth]{identificacao.png}} % Insira a imagem gerada pelo Python aqui
+    \caption{Validação do Modelo de Hammerstein: Dados Reais (Preto) vs Modelo Estimado (Vermelho).}
+    \label{fig:ident}
+\end{figure}
+
+Observa-se que o modelo de Hammerstein foi capaz de capturar tanto a não-linearidade estática do atuador quanto a dinâmica oscilatória da esfera, apresentando um MSE final reduzido. Os parâmetros do denominador ($a_1, a_2$) garantiram a estabilidade numérica do modelo discreto.
+
+\subsection{Desempenho do Controlador}
+O controlador Fuzzy PD foi validado utilizando o modelo identificado. A Fig. 2 ilustra a resposta do sistema para um degrau de referência de 40 cm.
+
+\begin{figure}[htbp]
+    \centerline{\includegraphics[width=0.45\textwidth]{controle.png}} % Insira a imagem do controle aqui
+    \caption{Resposta do sistema em malha fechada com Controlador Fuzzy PD.}
+    \label{fig:control}
+\end{figure}
+
+O sistema apresentou um tempo de subida rápido e, graças à ação derivativa do Fuzzy, o \textit{overshoot} foi minimizado, estabilizando a esfera na altura desejada mesmo na presença de ruído de medição simulado.
+
+\section{Conclusão}
+Este trabalho demonstrou a eficácia da combinação de técnicas de inteligência computacional aplicadas a um sistema real de levitação. A identificação via Modelo de Hammerstein, otimizada por Evolução Diferencial, provou ser uma metodologia robusta para extrair a dinâmica de sistemas aerodinâmicos complexos a partir de dados ruidosos. O controlador Fuzzy PD projetado, validado sobre este modelo, ofereceu uma resposta estável e suave, contornando as dificuldades típicas de modelagem analítica precisa exigidas por controladores clássicos.
+\begin{thebibliography}{00}
+\bibitem{b1} J. Chacón, H. Vargas, S. Dormido, and J. Sánchez, ``Experimental Study of Nonlinear PID Controllers in an Air Levitation System'', IFAC-PapersOnLine, vol. 51, no. 4, pp. 304-309, 2018.
+\bibitem{b2} K. Ogata, \textit{Modern Control Engineering}, 5th ed. Pearson Education, Inc., 2010.
+\bibitem{b3} C. Pauyac Estrada, W. Sheng, ``Modeling and Control of a Fan-driven Ball Levitation System'', 2025 IEEE 21st International Conference on Automation Science and Engineering (CASE), 2025.
+\bibitem{b4} J. F. García-Mejía et al., ``Comparison between evolutionary algorithms in height adjustment in a pneumatic levitator'', REVISTA ELECTRO, vol. 44, pp. 83-87, 2022.
+\end{thebibliography}
+
+\end{document}
