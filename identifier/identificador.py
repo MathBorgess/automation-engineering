@@ -57,7 +57,7 @@ def funcao_fitness(params):
 bounds = [(-10, 10), (-10, 10), (-5, 5),
           (-5, 5), (-2, 2), (-1, 1)]
 
-print("🚀 Rodando Evolução Diferencial (Differential Evolution)...\n")
+print("Rodando Evolução Diferencial (Differential Evolution)...\n")
 
 result = differential_evolution(
     funcao_fitness,
@@ -148,7 +148,6 @@ plt.grid(True)
 plt.subplot(3, 1, 2)
 plt.plot(t_vec, y_train_noisy, 'k', label="Dados Reais")
 plt.plot(t_vec, y_est_final, 'r--', linewidth=2, label="Hammerstein")
-plt.plot(t_vec, y_fisico, 'b-.', linewidth=2, label="Modelo Físico")
 plt.ylabel("Distância (m)")
 plt.title("Comparação dos Modelos (Distância)")
 plt.legend()
